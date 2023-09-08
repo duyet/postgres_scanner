@@ -234,9 +234,11 @@ static unique_ptr<FunctionData> PostgresBind(ClientContext &context, TableFuncti
 
 	// we create a transaction here, and get the snapshot id so the parallel
 	// reader threads can use the same snapshot
-	PGExec(bind_data->conn, "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
+	// PGExec(bind_data->conn, "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY");
 
-	bind_data->in_recovery = (bool)PGQuery(bind_data->conn, "SELECT pg_is_in_recovery()")->GetBool(0, 0);
+	// bind_data->in_recovery = (bool)PGQuery(bind_data->conn, "SELECT pg_is_in_recovery()")->GetBool(0, 0);
+	// bind_data->snapshot = "";
+	bind_data->in_recovery = true;
 	bind_data->snapshot = "";
 
 	if (!bind_data->in_recovery) {
