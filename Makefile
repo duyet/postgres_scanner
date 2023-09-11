@@ -1,71 +1,43 @@
-.PHONY: all clean format debug release duckdb_debug duckdb_release pull update
-
+.PHONY: all clean format debug release duckdb_debug duckdb_release update
 all: release
-
-MKFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
-PROJ_DIR := $(dir $(MKFILE_PATH))
+GEN=ninja
 
 OSX_BUILD_UNIVERSAL_FLAG=
-ifneq (${OSX_BUILD_ARCH}, "")
-	OSX_BUILD_UNIVERSAL_FLAG=-DOSX_BUILD_ARCH=${OSX_BUILD_ARCH}
-endif
-VCPKG_TOOLCHAIN_PATH?=
-ifneq ("${VCPKG_TOOLCHAIN_PATH}", "")
-	TOOLCHAIN_FLAGS:=${TOOLCHAIN_FLAGS} -DVCPKG_MANIFEST_DIR='${PROJ_DIR}' -DVCPKG_BUILD=1 -DCMAKE_TOOLCHAIN_FILE='${VCPKG_TOOLCHAIN_PATH}'
-endif
-ifneq ("${VCPKG_TARGET_TRIPLET}", "")
-	TOOLCHAIN_FLAGS:=${TOOLCHAIN_FLAGS} -DVCPKG_TARGET_TRIPLET='${VCPKG_TARGET_TRIPLET}'
+ifeq (${OSX_BUILD_UNIVERSAL}, 1)
+	OSX_BUILD_UNIVERSAL_FLAG=-DOSX_BUILD_UNIVERSAL=1
 endif
 
-ifeq ($(GEN),ninja)
-	GENERATOR=-G "Ninja"
-	FORCE_COLOR=-DFORCE_COLORED_OUTPUT=1
-endif
+# BUILD_OUT_OF_TREE_EXTENSION
+POSTGRES_SCANNER_PATH=${PWD}
 
-BUILD_FLAGS=-DEXTENSION_STATIC_BUILD=1 -DBUILD_EXTENSIONS="tpch;tpcds" ${OSX_BUILD_UNIVERSAL_FLAG} ${STATIC_LIBCPP} ${TOOLCHAIN_FLAGS}
-
-CLIENT_FLAGS :=
-
-# These flags will make DuckDB build the extension
-EXTENSION_FLAGS=\
--DDUCKDB_EXTENSION_NAMES="postgres_scanner" \
--DDUCKDB_EXTENSION_POSTGRES_SCANNER_PATH="$(PROJ_DIR)" \
--DDUCKDB_EXTENSION_POSTGRES_SCANNER_SHOULD_LINK=0 \
--DDUCKDB_EXTENSION_POSTGRES_SCANNER_LOAD_TESTS=1 \
--DDUCKDB_EXTENSION_POSTGRES_SCANNER_TEST_PATH="$(PROJ_DIR)test"
+clean:
+	rm -rf build
+	rm -rf postgres
 
 pull:
 	git submodule init
 	git submodule update --recursive --remote
 
-clean:
-	rm -rf build
-	rm -rf testext
-	cd duckdb && make clean
 
-# Main build
 debug:
-	mkdir -p  build/debug && \
-	cmake $(GENERATOR) $(FORCE_COLOR) $(EXTENSION_FLAGS) ${CLIENT_FLAGS} -DEXTENSION_STATIC_BUILD=1 -DCMAKE_BUILD_TYPE=Debug ${BUILD_FLAGS} -S ./duckdb/ -B build/debug && \
-	cmake --build build/debug --config Debug
+	mkdir -p build/debug && \
+	cd build/debug && \
+	cmake -DCMAKE_BUILD_TYPE=Debug ${OSX_BUILD_UNIVERSAL_FLAG} -DBUILD_TPCH_EXTENSION=1 -DBUILD_TPCDS_EXTENSION=1 -DEXTENSION_STATIC_BUILD=1 ../../duckdb/CMakeLists.txt -DEXTERNAL_EXTENSION_DIRECTORIES=${POSTGRES_SCANNER_PATH} -B. -S ../../duckdb && \
+	cmake --build .
 
-release:
+
+release: pull
 	mkdir -p build/release && \
-	cmake $(GENERATOR) $(FORCE_COLOR) $(EXTENSION_FLAGS) ${CLIENT_FLAGS} -DEXTENSION_STATIC_BUILD=1 -DCMAKE_BUILD_TYPE=Release ${BUILD_FLAGS} -S ./duckdb/ -B build/release && \
-	cmake --build build/release --config Release
+	cd build/release && \
+	cmake -DCMAKE_BUILD_TYPE=Release ${OSX_BUILD_UNIVERSAL_FLAG} -DBUILD_TPCH_EXTENSION=1 -DBUILD_TPCDS_EXTENSION=1 -DEXTENSION_STATIC_BUILD=1 ../../duckdb/CMakeLists.txt -DEXTERNAL_EXTENSION_DIRECTORIES=${POSTGRES_SCANNER_PATH} -B. -S ../../duckdb && \
+	cmake --build .
 
-# Main tests
-test: test_release
 
-test_release: release
-	./build/release/test/unittest "$(PROJ_DIR)test/*"
+test: release
+	./build/release/test/unittest --test-dir . "[postgres_scanner]"
 
-test_debug: debug
-	./build/debug/test/unittest "$(PROJ_DIR)test/*"
-
-format:
-	find src/ -iname *.hpp -o -iname *.cpp | xargs clang-format --sort-includes=0 -style=file -i
+format: pull
+	cp duckdb/.clang-format .
+	clang-format --sort-includes=0 -style=file -i postgres_scanner.cpp
+	clang-format --sort-includes=0 -style=file -i concurrency_test.cpp
 	cmake-format -i CMakeLists.txt
-
-update:
-	git submodule update --remote --merge

@@ -112,6 +112,7 @@ endfunction(PREPEND)
 
 prepend(LIBPG_SOURCES_FULLPATH ${CMAKE_CURRENT_SOURCE_DIR} ${LIBPG_SOURCES})
 
+message(${CMAKE_SOURCE_DIR})
 add_custom_command(
   OUTPUT ${LIBPG_SOURCES_FULLPATH}
   WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -122,7 +123,6 @@ build_loadable_extension(${TARGET_NAME} ${PARAMETERS} postgres_scanner.cpp
                          ${LIBPG_SOURCES_FULLPATH})
 
 target_link_libraries(${TARGET_NAME}_loadable_extension ${OPENSSL_LIBRARIES})
-set_property(TARGET ${TARGET_NAME}_loadable_extension PROPERTY C_STANDARD 99)
 
 if(WIN32)
   target_link_libraries(${TARGET_NAME}_loadable_extension wsock32 ws2_32
